@@ -123,3 +123,87 @@ rustup component add rustfmt --toolchain 1.62.0-x86_64-unknown-linux-gnu
 
 ![](./images/5.png)
 
+## 第四步：在qemu中运行
+
+下载 qemu 压缩包，我这里用的是 qemu-7.0.0
+
+```
+wget https://download.qemu.org/qemu-7.0.0.tar.xz
+```
+
+解压
+
+```
+tar xvJf qemu-7.0.0.tar.xz
+```
+
+安装
+
+```
+cd qemu-7.0.0
+./configure --target-list=aarch64-softmmu,aarch64-linux-user
+make -j8 && make install
+```
+
+下载 debian 镜像（有根文件系统），解压后如下：
+
+```
+dqib_arm64-virt
+|-- image.qcow2
+|-- initrd
+|-- kernel
+|-- readme.txt
+|-- ssh_user_ecdsa_key
+|-- ssh_user_ed25519_key
+`-- ssh_user_rsa_key
+
+1 directory, 7 files
+```
+
+根据 `readme.txt` 中的内容，执行：
+
+```
+qemu-system-aarch64 -machine 'virt' -cpu 'cortex-a57' -m 1G -device virtio-blk-device,drive=hd -drive file=image.qcow2,if=none,id=hd -device virtio-net-device,netdev=net -netdev user,id=net,hostfwd=tcp::2222-:22 -kernel kernel -initrd initrd -nographic -append "root=LABEL=rootfs console=ttyAMA0"
+```
+
+能正常运行说明文件没有损坏
+
+接下来编译 Rust samples, 在linux目录下执行：
+
+```
+make ARCH=arm64 LLVM=1 O=build menuconfig
+```
+
+按下图选择（注意以built-in方式编译，如果以模块编译则无法在启动时看到输出，因为模块还没有载入内核）：
+
+![](./images/6.png)
+
+![](./images/7.png)
+
+![](./images/8.png)
+
+![](./images/9.png)
+
+保存之后编译：
+
+```
+cd build
+make ARCH=arm64 LLVM=1 -j8
+```
+
+将 linux/build/arch/arm64/boot/Image 拷贝到 dqib_arm64-virt 目录下
+
+```
+cp linux/build/arch/arm64/boot/Image dqib_arm64-virt/Image
+```
+
+在 qemu 运行（将 `-kernel kernel` 换成 `-kernel Image`）：
+
+```
+cd dqib_arm64-virt
+qemu-system-aarch64 -machine 'virt' -cpu 'cortex-a57' -m 1G -device virtio-blk-device,drive=hd -drive file=image.qcow2,if=none,id=hd -device virtio-net-device,netdev=net -netdev user,id=net,hostfwd=tcp::2222-:22 -kernel Image -initrd initrd -nographic -append "root=LABEL=rootfs console=ttyAMA0"
+```
+
+运行结果如下：
+
+![](./images/10.png)
